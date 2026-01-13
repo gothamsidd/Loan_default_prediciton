@@ -201,6 +201,18 @@ def load_data(sample_size=None, random_state=42, use_demo=False):
                     
                     # Load the dataset
                     df = pd.read_csv(dataset_url)
+                    
+                    # Verify TARGET column exists
+                    if 'TARGET' not in df.columns:
+                        loading_placeholder.error(
+                            f"⚠️ Loaded dataset is missing TARGET column!\n\n"
+                            f"**File loaded:** {len(df):,} rows, {len(df.columns)} columns\n"
+                            f"**Columns found:** {', '.join(df.columns[:5])}...\n\n"
+                            f"This appears to be `application_test.csv` instead of `application_train.csv`.\n"
+                            f"Please upload the correct training dataset with TARGET column."
+                        )
+                        return None, 0, False
+                    
                     loading_placeholder.success(f"Successfully loaded {len(df):,} rows from cloud storage!")
                     return df, len(df), False
                 except Exception as e:
