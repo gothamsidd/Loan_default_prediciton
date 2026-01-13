@@ -111,8 +111,8 @@ except ImportError:
 try:
     import shap
     SHAP_AVAILABLE = True
-except ImportError:
-    pass
+except (ImportError, RuntimeError):
+    SHAP_AVAILABLE = False
 
 try:
     from imblearn.over_sampling import SMOTE
@@ -676,7 +676,7 @@ def main():
                             
                             test_df = pd.read_csv(test_url, nrows=10)
                             st.success(f"✅ **URL is accessible!**\n\nFound {len(test_df)} rows in test sample.\n\nThe full dataset should load. If it still doesn't, the file might be too large.")
-                            st.dataframe(test_df.head(), use_container_width=True)
+                            st.dataframe(test_df.head())
                     except Exception as e:
                         st.error(f"❌ **URL not accessible**\n\nError: `{str(e)}`")
                         st.info("""
@@ -920,7 +920,7 @@ def show_overview(df, df_clean, is_sampled=False, total_rows=0):
     missing_summary = missing_summary[missing_summary > 0].sort_values(ascending=False)
     if len(missing_summary) > 0:
         st.write(f"**Columns with missing values:** {len(missing_summary)}")
-        st.dataframe(missing_summary.head(20), use_container_width=True)
+        st.dataframe(missing_summary.head(20))
     else:
         st.success("No missing values after preprocessing!")
     
@@ -930,7 +930,7 @@ def show_overview(df, df_clean, is_sampled=False, total_rows=0):
     numeric_cols = [c for c in numeric_cols if c in df_clean.columns]
     if numeric_cols:
         stats_df = df_clean[numeric_cols].describe()
-        st.dataframe(stats_df, use_container_width=True)
+        st.dataframe(stats_df)
 
 def show_data_exploration(df_clean):
     st.header("Data Exploration")
@@ -1781,8 +1781,7 @@ def show_model_comparison(df_model):
     results = pd.DataFrame(model_results)
     
     st.subheader("Performance Metrics Comparison")
-    st.dataframe(results.style.highlight_max(axis=0, subset=['Accuracy', 'Precision', 'Recall', 'F1 Score', 'ROC-AUC']), 
-                use_container_width=True)
+    st.dataframe(results.style.highlight_max(axis=0, subset=['Accuracy', 'Precision', 'Recall', 'F1 Score', 'ROC-AUC']))
     
     # ROC Curves with Plotly
     st.subheader("ROC Curve Comparison")
@@ -1907,8 +1906,7 @@ def show_model_comparison(df_model):
     fig.update_layout(height=600, yaxis={'categoryorder': 'total ascending'})
     st.plotly_chart(fig)
     
-    st.dataframe(feature_importance.head(20).style.background_gradient(subset=['Importance'], cmap='Blues'), 
-                use_container_width=True)
+    st.dataframe(feature_importance.head(20).style.background_gradient(subset=['Importance'], cmap='Blues'))
 
 def show_predictions(df_model):
     st.header("Make Predictions")
@@ -2053,7 +2051,7 @@ def show_batch_predictions(df_model):
             
             # Show preview
             st.subheader("Data Preview")
-            st.dataframe(batch_df.head(10), use_container_width=True)
+            st.dataframe(batch_df.head(10))
             
             if st.button("Generate Predictions", type="primary"):
                 with st.spinner("Processing predictions... This may take a minute for large files."):
@@ -2167,7 +2165,7 @@ def show_batch_predictions(df_model):
                     
                     # Display results
                     st.subheader("Prediction Results")
-                    st.dataframe(results, use_container_width=True)
+                    st.dataframe(results)
                     
                     # Summary statistics
                     col1, col2, col3, col4 = st.columns(4)
@@ -2252,7 +2250,7 @@ def show_model_explainability(df_model):
                 fig.update_layout(height=500, yaxis={'categoryorder': 'total ascending'})
                 st.plotly_chart(fig)
             
-            st.dataframe(feature_importance.head(20), use_container_width=True)
+            st.dataframe(feature_importance.head(20))
     
     with tab2:
         st.subheader("SHAP Values (SHapley Additive exPlanations)")
@@ -2824,7 +2822,7 @@ def show_profit_curve(df_model):
         ]
     })
     cost_breakdown['Amount ($)'] = cost_breakdown['Amount ($)'].apply(lambda x: f"${x:,.0f}")
-    st.dataframe(cost_breakdown, use_container_width=True)
+    st.dataframe(cost_breakdown)
     
     # Comparison with default threshold
     st.subheader("Comparison: Default (0.5) vs Optimal Threshold")
@@ -2844,7 +2842,7 @@ def show_profit_curve(df_model):
             f"{fn - fn_d:,}"
         ]
     })
-    st.dataframe(comparison_df, use_container_width=True)
+    st.dataframe(comparison_df)
 
 def show_model_registry():
     st.header("Model Registry")
@@ -2882,7 +2880,7 @@ def show_model_registry():
             
             if registry_data:
                 registry_df = pd.DataFrame(registry_data)
-                st.dataframe(registry_df, use_container_width=True)
+                st.dataframe(registry_df)
             else:
                 st.info("No registered models found.")
         else:
@@ -3231,7 +3229,7 @@ def show_ensemble_methods(df_model):
                 })
                 
                 comparison_df = pd.DataFrame(comparison_data)
-                st.dataframe(comparison_df.style.highlight_max(axis=0), use_container_width=True)
+                st.dataframe(comparison_df.style.highlight_max(axis=0))
     
     with tab3:
         st.subheader("Blending")
@@ -3394,7 +3392,7 @@ def show_feature_selection(df_model):
                 fig.update_layout(height=600, yaxis={'categoryorder': 'total ascending'})
                 st.plotly_chart(fig)
                 
-                st.dataframe(importance_scores.head(30), use_container_width=True)
+                st.dataframe(importance_scores.head(30))
     
     with tab2:
         st.subheader("Select Features for Training")
@@ -3411,7 +3409,7 @@ def show_feature_selection(df_model):
                 st.session_state['selected_features'] = selected_features
                 
                 st.success(f"Selected {len(selected_features)} features")
-                st.dataframe(pd.DataFrame({'Feature': selected_features}), use_container_width=True)
+                st.dataframe(pd.DataFrame({'Feature': selected_features}))
     
     with tab3:
         st.subheader("Feature Selection Methods Comparison")
@@ -3441,7 +3439,7 @@ def show_feature_selection(df_model):
                     ]
                 })
                 
-                st.dataframe(comparison_df, use_container_width=True)
+                st.dataframe(comparison_df)
 
 
 if __name__ == "__main__":
