@@ -24,14 +24,54 @@ import warnings
 import time
 warnings.filterwarnings('ignore')
 
-# Import utilities
-from utils.logger import setup_logger
-from utils.config import config
-from utils.metrics import calculate_comprehensive_metrics, PerformanceMonitor
+# Import utilities (with fallbacks if not available)
+try:
+    from utils.logger import setup_logger
+    logger = setup_logger("streamlit_app")
+except (ImportError, Exception) as e:
+    import logging
+    logging.basicConfig(level=logging.INFO)
+    logger = logging.getLogger("streamlit_app")
+    logger.warning(f"Could not import utils.logger: {e}")
 
-# Setup logging
-logger = setup_logger("streamlit_app")
-monitor = PerformanceMonitor()
+try:
+    from utils.config import config
+except (ImportError, Exception) as e:
+    config = None
+    logger.warning(f"Could not import utils.config: {e}")
+
+try:
+    from utils.metrics import calculate_comprehensive_metrics, PerformanceMonitor
+    monitor = PerformanceMonitor()
+except (ImportError, Exception) as e:
+    # Fallback PerformanceMonitor
+    class PerformanceMonitor:
+        def __init__(self):
+            self.metrics_history = []
+            self.prediction_times = []
+        def record_prediction_time(self, elapsed_time):
+            self.prediction_times.append(elapsed_time)
+        def get_avg_prediction_time(self):
+            return sum(self.prediction_times) / len(self.prediction_times) if self.prediction_times else 0.0
+        def record_model_metrics(self, metrics):
+            self.metrics_history.append(metrics)
+        def get_latest_metrics(self):
+            return self.metrics_history[-1] if self.metrics_history else None
+    
+    def calculate_comprehensive_metrics(y_true, y_pred, y_proba=None):
+        from sklearn.metrics import accuracy_score, precision_score, recall_score, f1_score, roc_auc_score, confusion_matrix
+        metrics = {
+            'accuracy': accuracy_score(y_true, y_pred),
+            'precision': precision_score(y_true, y_pred, zero_division=0),
+            'recall': recall_score(y_true, y_pred, zero_division=0),
+            'f1_score': f1_score(y_true, y_pred, zero_division=0)
+        }
+        if y_proba is not None:
+            metrics['roc_auc'] = roc_auc_score(y_true, y_proba)
+        return metrics
+    
+    monitor = PerformanceMonitor()
+    logger.warning(f"Could not import utils.metrics: {e}")
 
 # Try to import optional advanced libraries
 XGBOOST_AVAILABLE = False
@@ -1375,10 +1415,13 @@ def show_model_training(df_model):
             if use_feature_selection:
                 status_text.text("Selecting best features...")
                 progress_bar.progress(25)
-                from utils.feature_selection import select_features_by_importance
-                X_selected, selected_features = select_features_by_importance(X, y, n_features=n_features)
-                X = X_selected
-                st.info(f"Selected {len(selected_features)} features out of {df_model.shape[1]-2} total")
+                try:
+                    from utils.feature_selection import select_features_by_importance
+                    X_selected, selected_features = select_features_by_importance(X, y, n_features=n_features)
+                    X = X_selected
+                    st.info(f"Selected {len(selected_features)} features out of {df_model.shape[1]-2} total")
+                except (ImportError, Exception) as e:
+                    st.warning(f"Feature selection unavailable: {e}. Continuing with all features.")
             
             # Train-test split
             status_text.text("Splitting data into train/test sets...")
@@ -3291,14 +3334,22 @@ def show_feature_selection(df_model):
     X_train = st.session_state['X_train']
     y_train = st.session_state['y_train']
     
-    from utils.feature_selection import get_feature_importance_scores, select_k_best_features
+    try:
+        from utils.feature_selection import get_feature_importance_scores, select_k_best_features
+        FEATURE_SELECTION_AVAILABLE = True
+    except (ImportError, Exception) as e:
+        FEATURE_SELECTION_AVAILABLE = False
+        st.warning(f"Feature selection utilities not available: {e}")
+        st.info("Please ensure utils/feature_selection.py exists and is properly configured.")
     
     tab1, tab2, tab3 = st.tabs(["Feature Importance Scores", "Select Features", "Comparison"])
     
     with tab1:
         st.subheader("Feature Importance Analysis")
         
-        if st.button("Calculate Feature Importance", type="primary"):
+        if not FEATURE_SELECTION_AVAILABLE:
+            st.error("Feature selection utilities are not available. Please check the utils/feature_selection.py file.")
+        elif st.button("Calculate Feature Importance", type="primary"):
             with st.spinner("Calculating feature importance scores..."):
                 importance_scores = get_feature_importance_scores(X_train, y_train)
                 
@@ -3343,14 +3394,21 @@ def show_feature_selection(df_model):
     with tab3:
         st.subheader("Feature Selection Methods Comparison")
         
-        if st.button("Compare Selection Methods", type="primary"):
+        if not FEATURE_SELECTION_AVAILABLE:
+            st.error("Feature selection utilities are not available.")
+        elif st.button("Compare Selection Methods", type="primary"):
             with st.spinner("Comparing different feature selection methods..."):
                 # K-Best
                 X_kbest, features_kbest = select_k_best_features(X_train, y_train, k=20)
                 
                 # RF Importance
-                from utils.feature_selection import select_features_by_importance
-                X_rf, features_rf = select_features_by_importance(X_train, y_train, n_features=20)
+                try:
+                    from utils.feature_selection import select_features_by_importance
+                    X_rf, features_rf = select_features_by_importance(X_train, y_train, n_features=20)
+                except (ImportError, Exception) as e:
+                    st.warning(f"Random Forest feature selection unavailable: {e}")
+                    features_rf = []
+                    X_rf = X_train
                 
                 comparison_df = pd.DataFrame({
                     'Method': ['K-Best (F-test)', 'Random Forest Importance'],
