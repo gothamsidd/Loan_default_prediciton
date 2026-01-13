@@ -1,0 +1,84 @@
+def show_feature_selection(df_model):
+    """Feature selection and importance analysis page."""
+    st.header("Feature Selection")
+    
+    st.info("Analyze and select the most important features for model training.")
+    
+    if 'X_train' not in st.session_state or 'y_train' not in st.session_state:
+        st.warning("Please train models first to enable feature selection analysis.")
+        return
+    
+    X_train = st.session_state['X_train']
+    y_train = st.session_state['y_train']
+    
+    from utils.feature_selection import get_feature_importance_scores, select_k_best_features
+    
+    tab1, tab2, tab3 = st.tabs(["Feature Importance Scores", "Select Features", "Comparison"])
+    
+    with tab1:
+        st.subheader("Feature Importance Analysis")
+        
+        if st.button("Calculate Feature Importance", type="primary"):
+            with st.spinner("Calculating feature importance scores..."):
+                importance_scores = get_feature_importance_scores(X_train, y_train)
+                
+                st.session_state['feature_importance_scores'] = importance_scores
+                
+                # Display top features
+                st.subheader("Top 20 Most Important Features")
+                top_features = importance_scores.head(20)
+                
+                fig = px.bar(
+                    top_features.reset_index(),
+                    x='combined_score',
+                    y='index',
+                    orientation='h',
+                    title='Top 20 Features by Combined Importance Score',
+                    color='combined_score',
+                    color_continuous_scale='Viridis',
+                    labels={'index': 'Feature', 'combined_score': 'Importance Score'}
+                )
+                fig.update_layout(height=600, yaxis={'categoryorder': 'total ascending'})
+                st.plotly_chart(fig, use_container_width=True)
+                
+                st.dataframe(importance_scores.head(30), use_container_width=True)
+    
+    with tab2:
+        st.subheader("Select Features for Training")
+        
+        if 'feature_importance_scores' not in st.session_state:
+            st.warning("Please calculate feature importance scores first.")
+        else:
+            importance_scores = st.session_state['feature_importance_scores']
+            
+            n_features = st.slider("Number of features to select", 10, min(50, len(X_train.columns)), 20)
+            
+            if st.button("Select Features", type="primary"):
+                selected_features = importance_scores.head(n_features).index.tolist()
+                st.session_state['selected_features'] = selected_features
+                
+                st.success(f"Selected {len(selected_features)} features")
+                st.dataframe(pd.DataFrame({'Feature': selected_features}), use_container_width=True)
+    
+    with tab3:
+        st.subheader("Feature Selection Methods Comparison")
+        
+        if st.button("Compare Selection Methods", type="primary"):
+            with st.spinner("Comparing different feature selection methods..."):
+                # K-Best
+                X_kbest, features_kbest = select_k_best_features(X_train, y_train, k=20)
+                
+                # RF Importance
+                from utils.feature_selection import select_features_by_importance
+                X_rf, features_rf = select_features_by_importance(X_train, y_train, n_features=20)
+                
+                comparison_df = pd.DataFrame({
+                    'Method': ['K-Best (F-test)', 'Random Forest Importance'],
+                    'Number of Features': [len(features_kbest), len(features_rf)],
+                    'Top 5 Features': [
+                        ', '.join(features_kbest[:5]),
+                        ', '.join(features_rf[:5])
+                    ]
+                })
+                
+                st.dataframe(comparison_df, use_container_width=True)
