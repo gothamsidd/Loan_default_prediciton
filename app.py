@@ -3334,11 +3334,12 @@ def show_feature_selection(df_model):
     X_train = st.session_state['X_train']
     y_train = st.session_state['y_train']
     
+    # Try to import feature selection utilities
+    FEATURE_SELECTION_AVAILABLE = False
     try:
         from utils.feature_selection import get_feature_importance_scores, select_k_best_features
         FEATURE_SELECTION_AVAILABLE = True
     except (ImportError, Exception) as e:
-        FEATURE_SELECTION_AVAILABLE = False
         st.warning(f"Feature selection utilities not available: {e}")
         st.info("Please ensure utils/feature_selection.py exists and is properly configured.")
     
