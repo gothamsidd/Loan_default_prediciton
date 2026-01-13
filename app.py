@@ -22,17 +22,27 @@ from datetime import datetime
 import os
 import warnings
 import time
+import sys
+from pathlib import Path
+
+# Add current directory to Python path (for Streamlit Cloud compatibility)
+current_dir = Path(__file__).parent
+if str(current_dir) not in sys.path:
+    sys.path.insert(0, str(current_dir))
+
 warnings.filterwarnings('ignore')
+
+# Initialize logger first (always available)
+import logging
+logging.basicConfig(level=logging.INFO, format='%(asctime)s - %(name)s - %(levelname)s - %(message)s')
+logger = logging.getLogger("streamlit_app")
 
 # Import utilities (with fallbacks if not available)
 try:
     from utils.logger import setup_logger
     logger = setup_logger("streamlit_app")
 except (ImportError, Exception) as e:
-    import logging
-    logging.basicConfig(level=logging.INFO)
-    logger = logging.getLogger("streamlit_app")
-    logger.warning(f"Could not import utils.logger: {e}")
+    logger.warning(f"Could not import utils.logger, using basic logging: {e}")
 
 try:
     from utils.config import config
@@ -71,7 +81,7 @@ except (ImportError, Exception) as e:
         return metrics
     
     monitor = PerformanceMonitor()
-    logger.warning(f"Could not import utils.metrics: {e}")
+    logger.warning(f"Could not import utils.metrics, using fallback: {e}")
 
 # Try to import optional advanced libraries
 XGBOOST_AVAILABLE = False
