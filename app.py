@@ -114,6 +114,58 @@ def load_data(sample_size=None, random_state=42):
         
         # Check file size
         file_path = 'application_train.csv'
+        
+        # Check if file exists
+        if not os.path.exists(file_path):
+            # Try loading from Streamlit secrets (for cloud deployment)
+            try:
+                import streamlit as st
+                if 'dataset_url' in st.secrets:
+                    file_path = st.secrets['dataset_url']
+                    st.info("Loading dataset from cloud storage...")
+                    return pd.read_csv(file_path), 0, False
+            except:
+                pass
+            
+            # If still not found, show helpful error
+            st.error("""
+            **Dataset file not found!**
+            
+            Please download `application_train.csv` from Kaggle:
+            https://www.kaggle.com/c/home-credit-default-risk/data
+            
+            For Streamlit Cloud deployment:
+            1. Upload dataset to cloud storage (S3, GCS, etc.)
+            2. Add the URL to Streamlit Secrets as 'dataset_url'
+            3. Or use the sample data option below
+            """)
+            
+            # Offer to use sample/demo data
+            if st.button("Use Sample Data (Demo Mode)"):
+                st.info("Creating sample dataset for demonstration...")
+                # Create a small synthetic dataset for demo
+                np.random.seed(42)
+                n_samples = 1000
+                sample_data = {
+                    'SK_ID_CURR': range(n_samples),
+                    'TARGET': np.random.choice([0, 1], size=n_samples, p=[0.92, 0.08]),
+                    'AMT_INCOME_TOTAL': np.random.lognormal(11, 0.5, n_samples),
+                    'AMT_CREDIT': np.random.lognormal(12, 0.5, n_samples),
+                    'AMT_ANNUITY': np.random.lognormal(9, 0.5, n_samples),
+                    'CNT_CHILDREN': np.random.poisson(0.5, n_samples),
+                    'EXT_SOURCE_2': np.random.beta(2, 5, n_samples),
+                    'EXT_SOURCE_3': np.random.beta(2, 5, n_samples),
+                    'DAYS_BIRTH': -np.random.randint(8000, 20000, n_samples),
+                    'DAYS_EMPLOYED': -np.random.randint(0, 5000, n_samples),
+                    'CODE_GENDER': np.random.choice(['M', 'F'], n_samples),
+                    'NAME_EDUCATION_TYPE': np.random.choice(['Higher education', 'Secondary / secondary special'], n_samples),
+                    'NAME_FAMILY_STATUS': np.random.choice(['Married', 'Single / not married'], n_samples),
+                }
+                df = pd.DataFrame(sample_data)
+                return df, len(df), False
+            
+            return None, 0, False
+        
         file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
         
         # If sample_size is specified, use efficient loading
