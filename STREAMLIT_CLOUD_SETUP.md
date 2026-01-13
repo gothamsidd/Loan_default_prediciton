@@ -2,7 +2,11 @@
 
 ## Current Status
 
-Your app is deployed to Streamlit Cloud, but it needs the dataset file to function properly.
+Your app is deployed to Streamlit Cloud! 🎉
+
+**Quick Start:** Enable "Use Demo Mode" in the sidebar to test all features with synthetic data.
+
+For production use with real data, follow the steps below.
 
 ## Option 1: Use Demo Mode (Quick Start)
 
