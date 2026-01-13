@@ -156,11 +156,37 @@ def load_data(sample_size=None, random_state=42, use_demo=False):
         if not os.path.exists(file_path):
             # Try loading from Streamlit secrets (for cloud deployment)
             try:
-                if hasattr(st, 'secrets') and 'dataset_url' in st.secrets:
-                    file_path = st.secrets['dataset_url']
-                    st.info("Loading dataset from cloud storage...")
-                    return pd.read_csv(file_path), 0, False
-            except:
+                # Check for secrets in multiple ways (Streamlit Cloud compatibility)
+                dataset_url = None
+                
+                # Method 1: Direct access
+                try:
+                    if hasattr(st, 'secrets') and st.secrets:
+                        if 'secrets' in st.secrets:
+                            dataset_url = st.secrets['secrets'].get('dataset_url')
+                        elif 'dataset_url' in st.secrets:
+                            dataset_url = st.secrets['dataset_url']
+                except:
+                    pass
+                
+                # Method 2: Try accessing directly
+                if not dataset_url:
+                    try:
+                        dataset_url = st.secrets.get('dataset_url') if hasattr(st, 'secrets') else None
+                    except:
+                        pass
+                
+                if dataset_url:
+                    st.info(f"Loading dataset from cloud storage: {dataset_url[:50]}...")
+                    try:
+                        df = pd.read_csv(dataset_url)
+                        st.success(f"Successfully loaded {len(df):,} rows from cloud storage!")
+                        return df, len(df), False
+                    except Exception as e:
+                        st.warning(f"Could not load from URL: {str(e)}")
+                        st.info("Falling back to demo mode or local file...")
+            except Exception as e:
+                # Silently continue to next option
                 pass
             
             # File not found - return None (will be handled in main)
@@ -404,11 +430,49 @@ def main():
     
     # Handle missing dataset
     if df is None and not use_demo_mode:
+        # Check if secrets are configured but not working
+        secrets_configured = False
+        dataset_url = None
+        try:
+            if hasattr(st, 'secrets') and st.secrets:
+                if 'secrets' in st.secrets and 'dataset_url' in st.secrets['secrets']:
+                    dataset_url = st.secrets['secrets']['dataset_url']
+                    secrets_configured = True
+                elif 'dataset_url' in st.secrets:
+                    dataset_url = st.secrets['dataset_url']
+                    secrets_configured = True
+        except:
+            pass
+        
         st.error("""
         **Dataset file not found!**
         
         Please choose one of the following options:
         """)
+        
+        # Show secrets status if configured
+        if secrets_configured:
+            st.warning(f"""
+            **Secrets detected but dataset not loading:**
+            - URL configured: {dataset_url[:60] if dataset_url else 'None'}...
+            - Check if the file is publicly accessible
+            - Verify the URL format is correct
+            - Check Streamlit Cloud logs for errors
+            """)
+            
+            if st.button("Test URL Connection"):
+                try:
+                    test_df = pd.read_csv(dataset_url, nrows=10)
+                    st.success(f"✅ URL is accessible! Found {len(test_df)} rows in test.")
+                    st.info("The full dataset should load. If not, check the logs.")
+                except Exception as e:
+                    st.error(f"❌ URL not accessible: {str(e)}")
+                    st.info("""
+                    **Troubleshooting:**
+                    1. Make sure the Google Drive file is set to "Anyone with the link"
+                    2. Try the alternative URL format in secrets
+                    3. Check if the file ID is correct
+                    """)
         
         col1, col2 = st.columns(2)
         with col1:
@@ -423,6 +487,20 @@ def main():
             2. Upload to cloud storage (S3, GCS, etc.)
             3. Add URL to Streamlit Secrets as 'dataset_url'
             """)
+        
+        # Show current secrets status
+        with st.expander("🔧 Debug: Check Secrets Configuration"):
+            try:
+                if hasattr(st, 'secrets'):
+                    st.json({
+                        "secrets_available": True,
+                        "secrets_keys": list(st.secrets.keys()) if hasattr(st.secrets, 'keys') else "N/A",
+                        "dataset_url_configured": 'dataset_url' in str(st.secrets) if hasattr(st.secrets, '__str__') else False
+                    })
+                else:
+                    st.write("Secrets not available")
+            except Exception as e:
+                st.write(f"Error checking secrets: {str(e)}")
         
         st.markdown("""
         **Demo Mode** creates synthetic data that allows you to:
