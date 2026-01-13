@@ -155,39 +155,57 @@ def load_data(sample_size=None, random_state=42, use_demo=False):
         # Check if file exists
         if not os.path.exists(file_path):
             # Try loading from Streamlit secrets (for cloud deployment)
+            dataset_url = None
+            
+            # Try multiple methods to access secrets (Streamlit Cloud compatibility)
             try:
-                # Check for secrets in multiple ways (Streamlit Cloud compatibility)
-                dataset_url = None
-                
-                # Method 1: Direct access
-                try:
-                    if hasattr(st, 'secrets') and st.secrets:
-                        if 'secrets' in st.secrets:
-                            dataset_url = st.secrets['secrets'].get('dataset_url')
-                        elif 'dataset_url' in st.secrets:
+                if hasattr(st, 'secrets'):
+                    # Method 1: Direct access (most common)
+                    if hasattr(st.secrets, 'get'):
+                        dataset_url = st.secrets.get('dataset_url')
+                    # Method 2: Dictionary-style access
+                    elif hasattr(st.secrets, '__getitem__'):
+                        try:
                             dataset_url = st.secrets['dataset_url']
-                except:
-                    pass
-                
-                # Method 2: Try accessing directly
-                if not dataset_url:
-                    try:
-                        dataset_url = st.secrets.get('dataset_url') if hasattr(st, 'secrets') else None
-                    except:
-                        pass
-                
-                if dataset_url:
-                    st.info(f"Loading dataset from cloud storage: {dataset_url[:50]}...")
-                    try:
-                        df = pd.read_csv(dataset_url)
-                        st.success(f"Successfully loaded {len(df):,} rows from cloud storage!")
-                        return df, len(df), False
-                    except Exception as e:
-                        st.warning(f"Could not load from URL: {str(e)}")
-                        st.info("Falling back to demo mode or local file...")
-            except Exception as e:
-                # Silently continue to next option
+                        except (KeyError, AttributeError):
+                            pass
+                    # Method 3: Nested secrets structure
+                    if not dataset_url and hasattr(st.secrets, 'secrets'):
+                        try:
+                            dataset_url = st.secrets.secrets.get('dataset_url')
+                        except:
+                            pass
+            except Exception:
                 pass
+            
+            if dataset_url:
+                try:
+                    # Show loading message
+                    loading_placeholder = st.empty()
+                    loading_placeholder.info(f"Loading dataset from cloud storage...")
+                    
+                    # Try loading with timeout
+                    import urllib.request
+                    import io
+                    
+                    # For Google Drive, we might need to handle the download differently
+                    if 'drive.google.com' in dataset_url:
+                        # Google Drive direct download format
+                        if '/uc?export=download&id=' in dataset_url:
+                            # Already in correct format
+                            pass
+                        elif '/file/d/' in dataset_url:
+                            # Extract file ID and convert
+                            file_id = dataset_url.split('/file/d/')[1].split('/')[0]
+                            dataset_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+                    
+                    # Load the dataset
+                    df = pd.read_csv(dataset_url)
+                    loading_placeholder.success(f"Successfully loaded {len(df):,} rows from cloud storage!")
+                    return df, len(df), False
+                except Exception as e:
+                    # Error will be handled in main function
+                    return None, 0, False
             
             # File not found - return None (will be handled in main)
             return None, 0, False
