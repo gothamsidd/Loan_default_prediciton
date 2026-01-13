@@ -106,9 +106,46 @@ st.markdown("""
     </style>
 """, unsafe_allow_html=True)
 
+def create_demo_data(n_samples=5000, random_state=42):
+    """Create synthetic demo dataset"""
+    np.random.seed(random_state)
+    sample_data = {
+        'SK_ID_CURR': range(n_samples),
+        'TARGET': np.random.choice([0, 1], size=n_samples, p=[0.92, 0.08]),
+        'AMT_INCOME_TOTAL': np.random.lognormal(11, 0.5, n_samples),
+        'AMT_CREDIT': np.random.lognormal(12, 0.5, n_samples),
+        'AMT_ANNUITY': np.random.lognormal(9, 0.5, n_samples),
+        'AMT_GOODS_PRICE': np.random.lognormal(11.5, 0.5, n_samples),
+        'CNT_CHILDREN': np.random.poisson(0.5, n_samples),
+        'CNT_FAM_MEMBERS': np.random.poisson(2, n_samples),
+        'EXT_SOURCE_1': np.random.beta(2, 5, n_samples),
+        'EXT_SOURCE_2': np.random.beta(2, 5, n_samples),
+        'EXT_SOURCE_3': np.random.beta(2, 5, n_samples),
+        'DAYS_BIRTH': -np.random.randint(8000, 20000, n_samples),
+        'DAYS_EMPLOYED': -np.random.randint(0, 5000, n_samples),
+        'DAYS_REGISTRATION': -np.random.randint(1000, 5000, n_samples),
+        'DAYS_ID_PUBLISH': -np.random.randint(500, 3000, n_samples),
+        'CODE_GENDER': np.random.choice(['M', 'F'], n_samples),
+        'FLAG_OWN_CAR': np.random.choice(['Y', 'N'], n_samples),
+        'FLAG_OWN_REALTY': np.random.choice(['Y', 'N'], n_samples),
+        'NAME_CONTRACT_TYPE': np.random.choice(['Cash loans', 'Revolving loans'], n_samples),
+        'NAME_EDUCATION_TYPE': np.random.choice(['Higher education', 'Secondary / secondary special', 'Incomplete higher', 'Lower secondary'], n_samples),
+        'NAME_FAMILY_STATUS': np.random.choice(['Married', 'Single / not married', 'Civil marriage', 'Separated'], n_samples),
+        'NAME_HOUSING_TYPE': np.random.choice(['House / apartment', 'Rented apartment', 'With parents'], n_samples),
+        'OCCUPATION_TYPE': np.random.choice(['Laborers', 'Core staff', 'Sales staff', 'Managers'], n_samples),
+        'ORGANIZATION_TYPE': np.random.choice(['Business Entity Type 3', 'Self-employed', 'Other'], n_samples),
+    }
+    return pd.DataFrame(sample_data)
+
 @st.cache_data
-def load_data(sample_size=None, random_state=42):
+def load_data(sample_size=None, random_state=42, use_demo=False):
     """Load and cache the training data with optional sampling"""
+    # If demo mode is enabled, return demo data
+    if use_demo:
+        n_samples = sample_size if sample_size else 5000
+        df = create_demo_data(n_samples=n_samples, random_state=random_state)
+        return df, len(df), False
+    
     try:
         import os
         
@@ -119,51 +156,14 @@ def load_data(sample_size=None, random_state=42):
         if not os.path.exists(file_path):
             # Try loading from Streamlit secrets (for cloud deployment)
             try:
-                import streamlit as st
-                if 'dataset_url' in st.secrets:
+                if hasattr(st, 'secrets') and 'dataset_url' in st.secrets:
                     file_path = st.secrets['dataset_url']
                     st.info("Loading dataset from cloud storage...")
                     return pd.read_csv(file_path), 0, False
             except:
                 pass
             
-            # If still not found, show helpful error
-            st.error("""
-            **Dataset file not found!**
-            
-            Please download `application_train.csv` from Kaggle:
-            https://www.kaggle.com/c/home-credit-default-risk/data
-            
-            For Streamlit Cloud deployment:
-            1. Upload dataset to cloud storage (S3, GCS, etc.)
-            2. Add the URL to Streamlit Secrets as 'dataset_url'
-            3. Or use the sample data option below
-            """)
-            
-            # Offer to use sample/demo data
-            if st.button("Use Sample Data (Demo Mode)"):
-                st.info("Creating sample dataset for demonstration...")
-                # Create a small synthetic dataset for demo
-                np.random.seed(42)
-                n_samples = 1000
-                sample_data = {
-                    'SK_ID_CURR': range(n_samples),
-                    'TARGET': np.random.choice([0, 1], size=n_samples, p=[0.92, 0.08]),
-                    'AMT_INCOME_TOTAL': np.random.lognormal(11, 0.5, n_samples),
-                    'AMT_CREDIT': np.random.lognormal(12, 0.5, n_samples),
-                    'AMT_ANNUITY': np.random.lognormal(9, 0.5, n_samples),
-                    'CNT_CHILDREN': np.random.poisson(0.5, n_samples),
-                    'EXT_SOURCE_2': np.random.beta(2, 5, n_samples),
-                    'EXT_SOURCE_3': np.random.beta(2, 5, n_samples),
-                    'DAYS_BIRTH': -np.random.randint(8000, 20000, n_samples),
-                    'DAYS_EMPLOYED': -np.random.randint(0, 5000, n_samples),
-                    'CODE_GENDER': np.random.choice(['M', 'F'], n_samples),
-                    'NAME_EDUCATION_TYPE': np.random.choice(['Higher education', 'Secondary / secondary special'], n_samples),
-                    'NAME_FAMILY_STATUS': np.random.choice(['Married', 'Single / not married'], n_samples),
-                }
-                df = pd.DataFrame(sample_data)
-                return df, len(df), False
-            
+            # File not found - return None (will be handled in main)
             return None, 0, False
         
         file_size_mb = os.path.getsize(file_path) / (1024 * 1024)
@@ -373,6 +373,14 @@ def main():
     
     st.sidebar.title("Data Settings")
     
+    # Demo mode toggle
+    use_demo_mode = st.sidebar.checkbox(
+        "Use Demo Mode (Sample Data)", 
+        value=st.session_state.get('use_demo_mode', False),
+        help="Use synthetic sample data if dataset file is not available"
+    )
+    st.session_state['use_demo_mode'] = use_demo_mode
+    
     pages_needing_full_data = ["Model Training", "Model Comparison", "Predictions", 
                                "Batch Predictions", "Model Explainability", "Threshold Optimization"]
     use_full_dataset = st.sidebar.checkbox(
@@ -392,8 +400,38 @@ def main():
         )
     
     # Load data
-    df, total_rows, is_sampled = load_data(sample_size=sample_size)
-    if df is None:
+    df, total_rows, is_sampled = load_data(sample_size=sample_size, use_demo=use_demo_mode)
+    
+    # Handle missing dataset
+    if df is None and not use_demo_mode:
+        st.error("""
+        **Dataset file not found!**
+        
+        Please choose one of the following options:
+        """)
+        
+        col1, col2 = st.columns(2)
+        with col1:
+            if st.button("Enable Demo Mode", type="primary"):
+                st.session_state['use_demo_mode'] = True
+                st.rerun()
+        
+        with col2:
+            st.info("""
+            **For production:**
+            1. Download dataset from [Kaggle](https://www.kaggle.com/c/home-credit-default-risk/data)
+            2. Upload to cloud storage (S3, GCS, etc.)
+            3. Add URL to Streamlit Secrets as 'dataset_url'
+            """)
+        
+        st.markdown("""
+        **Demo Mode** creates synthetic data that allows you to:
+        - Test all app features
+        - Explore the UI and functionality
+        - Train models (with synthetic data)
+        
+        Note: Model performance will not reflect real-world results.
+        """)
         return
     
     if is_sampled:
