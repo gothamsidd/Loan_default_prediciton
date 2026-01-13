@@ -23,10 +23,17 @@ import os
 import warnings
 import time
 import sys
+import os
 from pathlib import Path
 
 # Add current directory to Python path (for Streamlit Cloud compatibility)
-current_dir = Path(__file__).parent
+try:
+    # Try to get the directory containing this file
+    current_dir = Path(__file__).parent.absolute()
+except NameError:
+    # If __file__ is not available (some environments), use current working directory
+    current_dir = Path(os.getcwd())
+
 if str(current_dir) not in sys.path:
     sys.path.insert(0, str(current_dir))
 
