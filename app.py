@@ -190,17 +190,96 @@ def load_data(sample_size=None, random_state=42, use_demo=False):
                     
                     # For Google Drive, we might need to handle the download differently
                     if 'drive.google.com' in dataset_url:
-                        # Google Drive direct download format
-                        if '/uc?export=download&id=' in dataset_url:
-                            # Already in correct format
-                            pass
-                        elif '/file/d/' in dataset_url:
-                            # Extract file ID and convert
+                        # Extract file ID
+                        file_id = None
+                        if '/file/d/' in dataset_url:
                             file_id = dataset_url.split('/file/d/')[1].split('/')[0]
-                            dataset_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+                        elif 'id=' in dataset_url:
+                            file_id = dataset_url.split('id=')[1].split('&')[0].split('/')[0]
+                        
+                        if file_id:
+                            # For large files, Google Drive requires confirmation
+                            # Use the confirmed download URL
+                            dataset_url = f"https://drive.google.com/uc?export=download&id={file_id}&confirm=t"
                     
-                    # Load the dataset
-                    df = pd.read_csv(dataset_url)
+                    # Try to load the dataset
+                    # Google Drive large files (>100MB) return HTML virus scan warning
+                    # We need to handle this specially
+                    import urllib.request
+                    import io
+                    import http.cookiejar
+                    
+                    try:
+                        # First, try to read a small sample to check if it's CSV or HTML
+                        req = urllib.request.Request(dataset_url)
+                        req.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+                        response = urllib.request.urlopen(req, timeout=30)
+                        content_sample = response.read(5000)  # Read first 5KB
+                        content_str = content_sample.decode('utf-8', errors='ignore')
+                        
+                        # Check if response is HTML (virus scan warning page)
+                        is_html = (content_str.strip().startswith('<!DOCTYPE') or 
+                                  '<html>' in content_str.lower() or
+                                  'virus scan' in content_str.lower() or
+                                  'Google Drive' in content_str)
+                        
+                        if is_html and file_id:
+                            # This is the virus scan warning page for large files
+                            # Use the confirmed download URL
+                            loading_placeholder.warning(
+                                "Large file detected. Google Drive requires confirmation for files >100MB. "
+                                "Attempting to download with confirmation..."
+                            )
+                            
+                            # Use the confirmed download endpoint
+                            confirmed_url = f"https://drive.usercontent.google.com/download?id={file_id}&export=download&confirm=t&uuid="
+                            
+                            # Create cookie jar for session handling
+                            cj = http.cookiejar.CookieJar()
+                            opener = urllib.request.build_opener(urllib.request.HTTPCookieProcessor(cj))
+                            
+                            # Make request with cookies
+                            req2 = urllib.request.Request(confirmed_url)
+                            req2.add_header('User-Agent', 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36')
+                            
+                            # Try to download
+                            try:
+                                response2 = opener.open(req2, timeout=120)  # Longer timeout for large files
+                                df = pd.read_csv(io.BytesIO(response2.read()))
+                            except Exception as e2:
+                                # If that fails, try alternative method
+                                alt_url = f"https://drive.google.com/uc?export=download&id={file_id}&confirm=t"
+                                req3 = urllib.request.Request(alt_url)
+                                req3.add_header('User-Agent', 'Mozilla/5.0')
+                                response3 = opener.open(req3, timeout=120)
+                                df = pd.read_csv(io.BytesIO(response3.read()))
+                        else:
+                            # It's CSV data, read it normally
+                            # Close the sample response and read full file
+                            response.close()
+                            req_full = urllib.request.Request(dataset_url)
+                            req_full.add_header('User-Agent', 'Mozilla/5.0')
+                            response_full = urllib.request.urlopen(req_full, timeout=120)
+                            df = pd.read_csv(io.BytesIO(response_full.read()))
+                            
+                    except Exception as e:
+                        # Fallback: try direct read_csv (works for smaller files)
+                        try:
+                            df = pd.read_csv(dataset_url, timeout=120)
+                        except Exception as e2:
+                            error_msg = str(e2)
+                            if 'HTML' in error_msg or '<!DOCTYPE' in error_msg:
+                                raise Exception(
+                                    "Google Drive is blocking direct download of large files (>100MB).\n\n"
+                                    "**Solutions:**\n"
+                                    "1. **Use Dropbox** (recommended): Upload to Dropbox and use a direct download link\n"
+                                    "2. **Use AWS S3**: Upload to S3 and use a public URL\n"
+                                    "3. **Use GitHub Releases**: Upload as a release asset\n"
+                                    "4. **Split the file**: Compress and split into smaller chunks\n\n"
+                                    "For Dropbox: Get a direct download link (dl.dropboxusercontent.com)"
+                                )
+                            else:
+                                raise Exception(f"Failed to load dataset: {str(e2)}")
                     
                     # Verify TARGET column exists
                     if 'TARGET' not in df.columns:
