@@ -121,12 +121,16 @@ try:
 except ImportError:
     pass
 
-# Page configuration
-st.set_page_config(
-    page_title="Loan Default Prediction",
-    layout="wide",
-    initial_sidebar_state="expanded"
-)
+# Page configuration - MUST be first Streamlit command
+try:
+    st.set_page_config(
+        page_title="Loan Default Prediction",
+        layout="wide",
+        initial_sidebar_state="expanded"
+    )
+except Exception as e:
+    # If set_page_config fails (e.g., already called), continue
+    pass
 
 # Enhanced styling for better UI/UX
 st.markdown("""
@@ -3441,4 +3445,36 @@ def show_feature_selection(df_model):
 
 
 if __name__ == "__main__":
-    main()
+    try:
+        main()
+    except Exception as e:
+        import traceback
+        error_trace = traceback.format_exc()
+        
+        st.error(f"""
+        **Application Error**
+        
+        An error occurred while running the app:
+        
+        ```
+        {str(e)}
+        ```
+        """)
+        
+        with st.expander("🔍 Full Error Details"):
+            st.code(error_trace, language="python")
+        
+        st.info("""
+        **Troubleshooting Steps:**
+        1. Check the Streamlit Cloud logs (Manage app → Logs) for detailed error information
+        2. Verify all dependencies are installed (check requirements.txt)
+        3. Ensure the utils/ directory exists and contains all required files
+        4. Try clearing the app cache (Manage app → Clear cache)
+        5. Check if the dataset file is accessible (if using cloud storage)
+        """)
+        
+        # Log the error for debugging
+        try:
+            logger.error(f"App crashed: {str(e)}\n{error_trace}")
+        except:
+            pass
