@@ -2,6 +2,12 @@
 
 A machine learning project for predicting loan defaults using the Kaggle Home Credit dataset. Built a Streamlit dashboard and FastAPI backend to make predictions and explore the data.
 
+## 🚀 Live Demo
+
+**Try it live:** [Streamlit Cloud App](https://your-app-name.streamlit.app)
+
+*Note: Enable "Use Demo Mode" in the sidebar to use synthetic data if the dataset is not available.*
+
 ## Getting Started
 
 ### 1. Download the Dataset
