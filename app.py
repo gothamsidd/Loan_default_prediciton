@@ -680,6 +680,9 @@ def show_overview(df, df_clean, is_sampled=False, total_rows=0):
     if is_sampled:
         st.info(f"Showing statistics for a sample of {len(df):,} rows from {total_rows:,} total records.")
     
+    # Check if TARGET column exists
+    has_target = 'TARGET' in df.columns
+    
     col1, col2, col3, col4 = st.columns(4)
     with col1:
         if is_sampled:
@@ -689,45 +692,67 @@ def show_overview(df, df_clean, is_sampled=False, total_rows=0):
     with col2:
         st.metric("Total Features", len(df.columns))
     with col3:
-        default_rate = df['TARGET'].mean() * 100
-        st.metric("Default Rate", f"{default_rate:.2f}%")
+        if has_target:
+            default_rate = df['TARGET'].mean() * 100
+            st.metric("Default Rate", f"{default_rate:.2f}%")
+        else:
+            st.metric("Default Rate", "N/A")
+            st.warning("⚠️ TARGET column not found. This might be a test dataset.")
     with col4:
-        st.metric("Non-Default Rate", f"{100-default_rate:.2f}%")
+        if has_target:
+            default_rate = df['TARGET'].mean() * 100
+            st.metric("Non-Default Rate", f"{100-default_rate:.2f}%")
+        else:
+            st.metric("Non-Default Rate", "N/A")
     
-    st.subheader("Target Distribution")
-    col1, col2 = st.columns(2)
-    
-    with col1:
-        # Interactive pie chart with Plotly
-        target_counts = df['TARGET'].value_counts()
-        fig = px.pie(
-            values=target_counts.values, 
-            names=['Non-Default (0)', 'Default (1)'],
-            title="Target Variable Distribution",
-            color_discrete_sequence=['#10b981', '#ef4444'],
-            hole=0.4
-        )
-        fig.update_traces(textposition='inside', textinfo='percent+label')
-        fig.update_layout(showlegend=True, height=400)
-        st.plotly_chart(fig)
-    
-    with col2:
-        target_df = pd.DataFrame({
-            'Status': ['Non-Default', 'Default'],
-            'Count': [target_counts[0], target_counts[1]]
-        })
-        fig = px.bar(
-            target_df, 
-            x='Status', 
-            y='Count',
-            title="Target Count Distribution",
-            color='Status',
-            color_discrete_map={'Non-Default': '#10b981', 'Default': '#ef4444'},
-            text='Count'
-        )
-        fig.update_traces(texttemplate='%{text:,}', textposition='outside')
-        fig.update_layout(showlegend=False, height=400, yaxis_title="Number of Applications")
-        st.plotly_chart(fig)
+    if has_target:
+        st.subheader("Target Distribution")
+        col1, col2 = st.columns(2)
+        
+        with col1:
+            # Interactive pie chart with Plotly
+            target_counts = df['TARGET'].value_counts()
+            fig = px.pie(
+                values=target_counts.values, 
+                names=['Non-Default (0)', 'Default (1)'],
+                title="Target Variable Distribution",
+                color_discrete_sequence=['#10b981', '#ef4444'],
+                hole=0.4
+            )
+            fig.update_traces(textposition='inside', textinfo='percent+label')
+            fig.update_layout(showlegend=True, height=400)
+            st.plotly_chart(fig)
+        
+        with col2:
+            target_df = pd.DataFrame({
+                'Status': ['Non-Default', 'Default'],
+                'Count': [target_counts[0], target_counts[1]]
+            })
+            fig = px.bar(
+                target_df, 
+                x='Status', 
+                y='Count',
+                title="Target Count Distribution",
+                color='Status',
+                color_discrete_map={'Non-Default': '#10b981', 'Default': '#ef4444'},
+                text='Count'
+            )
+            fig.update_traces(texttemplate='%{text:,}', textposition='outside')
+            fig.update_layout(showlegend=False, height=400, yaxis_title="Number of Applications")
+            st.plotly_chart(fig)
+    else:
+        st.warning("""
+        **⚠️ TARGET column not found in dataset**
+        
+        This dataset appears to be missing the target variable. Possible reasons:
+        - You may have loaded the test dataset (`application_test.csv`) instead of the training dataset (`application_train.csv`)
+        - The dataset file might be incomplete
+        
+        **To fix:**
+        - Make sure you're using `application_train.csv` which contains the TARGET column
+        - Check your Streamlit Secrets configuration
+        - Verify the dataset file is complete
+        """)
     
     st.subheader("Dataset Information")
     if is_sampled:
@@ -809,49 +834,52 @@ def show_data_exploration(df_clean):
         
         col1, col2 = st.columns(2)
         
-        with col1:
-            # Interactive box plot
-            fig = px.box(
-                df_eda,
-                x='TARGET',
-                y='AMT_INCOME_TOTAL',
-                color='TARGET',
-                title="Income vs Default Status",
-                labels={'TARGET': 'Default (1 = Yes)', 'AMT_INCOME_TOTAL': 'Income'},
-                color_discrete_map={0: '#10b981', 1: '#ef4444'}
-            )
-            fig.update_layout(height=400, showlegend=False)
-            st.plotly_chart(fig)
-        
-        with col2:
-            # Interactive scatter plot
-            sample_scatter = df_eda.sample(n=min(5000, len(df_eda)), random_state=42)
-            fig = px.scatter(
-                sample_scatter,
-                x='AMT_INCOME_TOTAL',
-                y='AMT_CREDIT',
-                color='TARGET',
-                title="Income vs Credit by Default Status",
-                labels={'TARGET': 'Default Status', 'AMT_INCOME_TOTAL': 'Income', 'AMT_CREDIT': 'Credit'},
-                color_discrete_map={0: '#10b981', 1: '#ef4444'},
-                opacity=0.6
-            )
-            fig.update_layout(height=400)
-            st.plotly_chart(fig)
-        
-        # Credit to Income Ratio
-        if 'CREDIT_INCOME_RATIO' in df_eda.columns:
-            fig = px.box(
-                df_eda,
-                x='TARGET',
-                y='CREDIT_INCOME_RATIO',
-                color='TARGET',
-                title="Credit to Income Ratio vs Default",
-                labels={'TARGET': 'Default (1 = Yes)', 'CREDIT_INCOME_RATIO': 'Credit to Income Ratio'},
-                color_discrete_map={0: '#10b981', 1: '#ef4444'}
-            )
-            fig.update_layout(height=400, showlegend=False)
-            st.plotly_chart(fig)
+        if 'TARGET' in df_eda.columns:
+            with col1:
+                # Interactive box plot
+                fig = px.box(
+                    df_eda,
+                    x='TARGET',
+                    y='AMT_INCOME_TOTAL',
+                    color='TARGET',
+                    title="Income vs Default Status",
+                    labels={'TARGET': 'Default (1 = Yes)', 'AMT_INCOME_TOTAL': 'Income'},
+                    color_discrete_map={0: '#10b981', 1: '#ef4444'}
+                )
+                fig.update_layout(height=400, showlegend=False)
+                st.plotly_chart(fig)
+            
+            with col2:
+                # Interactive scatter plot
+                sample_scatter = df_eda.sample(n=min(5000, len(df_eda)), random_state=42)
+                fig = px.scatter(
+                    sample_scatter,
+                    x='AMT_INCOME_TOTAL',
+                    y='AMT_CREDIT',
+                    color='TARGET',
+                    title="Income vs Credit by Default Status",
+                    labels={'TARGET': 'Default Status', 'AMT_INCOME_TOTAL': 'Income', 'AMT_CREDIT': 'Credit'},
+                    color_discrete_map={0: '#10b981', 1: '#ef4444'},
+                    opacity=0.6
+                )
+                fig.update_layout(height=400)
+                st.plotly_chart(fig)
+            
+            # Credit to Income Ratio
+            if 'CREDIT_INCOME_RATIO' in df_eda.columns:
+                fig = px.box(
+                    df_eda,
+                    x='TARGET',
+                    y='CREDIT_INCOME_RATIO',
+                    color='TARGET',
+                    title="Credit to Income Ratio vs Default",
+                    labels={'TARGET': 'Default (1 = Yes)', 'CREDIT_INCOME_RATIO': 'Credit to Income Ratio'},
+                    color_discrete_map={0: '#10b981', 1: '#ef4444'}
+                )
+                fig.update_layout(height=400, showlegend=False)
+                st.plotly_chart(fig)
+        else:
+            st.warning("TARGET column not found. Some visualizations are unavailable.")
     
     with tab2:
         st.subheader("Demographic Analysis")
@@ -1019,6 +1047,17 @@ def show_data_exploration(df_clean):
 def show_advanced_analysis(df_clean):
     st.header("Advanced Analysis & Insights")
     
+    # Check if TARGET column exists
+    has_target = 'TARGET' in df_clean.columns
+    if not has_target:
+        st.warning("⚠️ TARGET column not found. This appears to be a test dataset. Advanced analysis requiring target variable is unavailable.")
+        st.info("""
+        **To enable full analysis:**
+        - Make sure you're using `application_train.csv` which contains the TARGET column
+        - Check your Streamlit Secrets configuration
+        - Verify the dataset file is complete
+        """)
+    
     # Use reasonable sample size for advanced analysis
     max_analysis_size = 30000
     if len(df_clean) > max_analysis_size:
@@ -1039,6 +1078,10 @@ def show_advanced_analysis(df_clean):
     
     with tab1:
         st.subheader("Key Risk Factors Analysis")
+        
+        if not has_target:
+            st.info("Risk factor analysis requires the TARGET column. Please use the training dataset.")
+            return
         
         # Income type risk
         if 'NAME_INCOME_TYPE' in df_eda.columns:
@@ -1187,18 +1230,19 @@ def show_advanced_analysis(df_clean):
             st.pyplot(fig)
             
             # Missing by target
-            missing_by_target = {}
-            for col in missing_cols[:10]:  # Top 10 columns
-                missing_by_target[col] = df_clean.groupby('TARGET')[col].apply(lambda x: x.isnull().mean())
-            
-            if missing_by_target:
-                missing_df = pd.DataFrame(missing_by_target).T
-                fig, ax = plt.subplots(figsize=(10, 6))
-                missing_df.plot(kind='barh', ax=ax, color=['#2ecc71', '#e74c3c'])
-                ax.set_title("Missing Data Rate by Target")
-                ax.set_xlabel("Missing Rate")
-                ax.legend(['Non-Default', 'Default'])
-                st.pyplot(fig)
+            if 'TARGET' in df_clean.columns:
+                missing_by_target = {}
+                for col in missing_cols[:10]:  # Top 10 columns
+                    missing_by_target[col] = df_clean.groupby('TARGET')[col].apply(lambda x: x.isnull().mean())
+                
+                if missing_by_target:
+                    missing_df = pd.DataFrame(missing_by_target).T
+                    fig, ax = plt.subplots(figsize=(10, 6))
+                    missing_df.plot(kind='barh', ax=ax, color=['#2ecc71', '#e74c3c'])
+                    ax.set_title("Missing Data Rate by Target")
+                    ax.set_xlabel("Missing Rate")
+                    ax.legend(['Non-Default', 'Default'])
+                    st.pyplot(fig)
 
 def show_model_training(df_model):
     st.header("Model Training")
@@ -1230,6 +1274,10 @@ def show_model_training(df_model):
             status_text.text("Preparing features...")
             progress_bar.progress(20)
             X = df_model.drop(columns=['TARGET', 'SK_ID_CURR'], errors='ignore')
+            if 'TARGET' not in df_model.columns:
+                st.error("❌ TARGET column not found in dataset. Cannot train models without target variable.")
+                st.info("Please use `application_train.csv` which contains the TARGET column.")
+                return
             y = df_model['TARGET']
             
             # Feature selection
@@ -2224,6 +2272,11 @@ def show_insights_recommendations(df_clean, df_model):
     st.subheader("Key Insights")
     
     insights = []
+    
+    if 'TARGET' not in df_clean.columns:
+        st.warning("⚠️ TARGET column not found. Insights requiring target variable are unavailable.")
+        st.info("Please use `application_train.csv` which contains the TARGET column for full insights.")
+        return
     
     default_rate = df_clean['TARGET'].mean() * 100
     insights.append(f"**Default Rate**: {default_rate:.2f}% of applicants default on their loans")
