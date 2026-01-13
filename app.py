@@ -451,16 +451,40 @@ def main():
         # Check if secrets are configured but not working
         secrets_configured = False
         dataset_url = None
+        secrets_info = {}
+        
         try:
-            if hasattr(st, 'secrets') and st.secrets:
-                if 'secrets' in st.secrets and 'dataset_url' in st.secrets['secrets']:
-                    dataset_url = st.secrets['secrets']['dataset_url']
+            if hasattr(st, 'secrets'):
+                # Try to get the URL
+                if hasattr(st.secrets, 'get'):
+                    dataset_url = st.secrets.get('dataset_url')
+                elif hasattr(st.secrets, '__getitem__'):
+                    try:
+                        dataset_url = st.secrets['dataset_url']
+                    except (KeyError, AttributeError):
+                        pass
+                
+                # Get secrets info for debugging
+                try:
+                    if hasattr(st.secrets, 'keys'):
+                        secrets_info = {
+                            "secrets_available": True,
+                            "secrets_keys": list(st.secrets.keys()),
+                            "dataset_url_found": dataset_url is not None
+                        }
+                    else:
+                        secrets_info = {
+                            "secrets_available": True,
+                            "secrets_type": str(type(st.secrets)),
+                            "dataset_url_found": dataset_url is not None
+                        }
+                except:
+                    secrets_info = {"secrets_available": True, "error": "Could not inspect secrets"}
+                
+                if dataset_url:
                     secrets_configured = True
-                elif 'dataset_url' in st.secrets:
-                    dataset_url = st.secrets['dataset_url']
-                    secrets_configured = True
-        except:
-            pass
+        except Exception as e:
+            secrets_info = {"secrets_available": False, "error": str(e)}
         
         st.error("""
         **Dataset file not found!**
@@ -471,26 +495,74 @@ def main():
         # Show secrets status if configured
         if secrets_configured:
             st.warning(f"""
-            **Secrets detected but dataset not loading:**
-            - URL configured: {dataset_url[:60] if dataset_url else 'None'}...
-            - Check if the file is publicly accessible
-            - Verify the URL format is correct
-            - Check Streamlit Cloud logs for errors
+            **⚠️ Secrets detected but dataset not loading**
+            
+            **URL configured:** `{dataset_url[:80] if dataset_url else 'None'}...`
+            
+            **Possible issues:**
+            1. Google Drive file is not set to "Anyone with the link"
+            2. URL format might need adjustment
+            3. File might be too large for direct download
+            4. Network timeout during download
+            
+            **Next steps:**
+            - Check Streamlit Cloud logs (Manage app → Logs)
+            - Verify file sharing settings in Google Drive
+            - Try the "Test URL" button below
             """)
             
-            if st.button("Test URL Connection"):
-                try:
-                    test_df = pd.read_csv(dataset_url, nrows=10)
-                    st.success(f"✅ URL is accessible! Found {len(test_df)} rows in test.")
-                    st.info("The full dataset should load. If not, check the logs.")
-                except Exception as e:
-                    st.error(f"❌ URL not accessible: {str(e)}")
-                    st.info("""
-                    **Troubleshooting:**
-                    1. Make sure the Google Drive file is set to "Anyone with the link"
-                    2. Try the alternative URL format in secrets
-                    3. Check if the file ID is correct
-                    """)
+            col1, col2 = st.columns(2)
+            with col1:
+                if st.button("🔍 Test URL Connection", type="secondary"):
+                    try:
+                        with st.spinner("Testing URL connection..."):
+                            # Handle Google Drive URL conversion if needed
+                            test_url = dataset_url
+                            if 'drive.google.com/file/d/' in test_url:
+                                file_id = test_url.split('/file/d/')[1].split('/')[0]
+                                test_url = f"https://drive.google.com/uc?export=download&id={file_id}"
+                            
+                            test_df = pd.read_csv(test_url, nrows=10)
+                            st.success(f"✅ **URL is accessible!**\n\nFound {len(test_df)} rows in test sample.\n\nThe full dataset should load. If it still doesn't, the file might be too large.")
+                            st.dataframe(test_df.head(), use_container_width=True)
+                    except Exception as e:
+                        st.error(f"❌ **URL not accessible**\n\nError: `{str(e)}`")
+                        st.info("""
+                        **Troubleshooting steps:**
+                        1. Go to Google Drive → Right-click file → Share → Set to "Anyone with the link"
+                        2. Try copying the file ID and using this format in secrets:
+                           ```
+                           [secrets]
+                           dataset_url = "https://drive.google.com/uc?export=download&id=YOUR_FILE_ID"
+                           ```
+                        3. Check if the file size is under 1GB (Streamlit Cloud has limits)
+                        """)
+            
+            with col2:
+                if st.button("📋 Copy Correct Secrets Format", type="secondary"):
+                    file_id = "YOUR_FILE_ID"
+                    if dataset_url and '/file/d/' in dataset_url:
+                        file_id = dataset_url.split('/file/d/')[1].split('/')[0]
+                    elif dataset_url and 'id=' in dataset_url:
+                        file_id = dataset_url.split('id=')[1].split('&')[0]
+                    
+                    secrets_format = f'''[secrets]
+dataset_url = "https://drive.google.com/uc?export=download&id={file_id}"'''
+                    st.code(secrets_format, language="toml")
+                    st.info("Copy this and paste into Streamlit Cloud Secrets")
+        else:
+            st.info("""
+            **No secrets configured yet.**
+            
+            To add the dataset URL:
+            1. Go to Streamlit Cloud → Your App → Settings → Secrets
+            2. Add the following:
+            ```toml
+            [secrets]
+            dataset_url = "https://drive.google.com/uc?export=download&id=YOUR_FILE_ID"
+            ```
+            3. Save and wait for redeployment
+            """)
         
         col1, col2 = st.columns(2)
         with col1:
@@ -507,18 +579,10 @@ def main():
             """)
         
         # Show current secrets status
-        with st.expander("🔧 Debug: Check Secrets Configuration"):
-            try:
-                if hasattr(st, 'secrets'):
-                    st.json({
-                        "secrets_available": True,
-                        "secrets_keys": list(st.secrets.keys()) if hasattr(st.secrets, 'keys') else "N/A",
-                        "dataset_url_configured": 'dataset_url' in str(st.secrets) if hasattr(st.secrets, '__str__') else False
-                    })
-                else:
-                    st.write("Secrets not available")
-            except Exception as e:
-                st.write(f"Error checking secrets: {str(e)}")
+        with st.expander("🔧 Debug: Secrets Configuration"):
+            st.json(secrets_info)
+            if dataset_url:
+                st.code(f"Current URL: {dataset_url}", language="text")
         
         st.markdown("""
         **Demo Mode** creates synthetic data that allows you to:
